@@ -1,0 +1,1 @@
+/usr/bin/cc  -fopenmp CMakeFiles/rpd3.dir/main.c.o -o rpd3  -Wl,-rpath,/home/borja/Documents/TFG/GeneraRitmo/Libs/RAPIDD/lib/build libRAPIDD.so /usr/lib/x86_64-linux-gnu/libgsl.so /usr/lib/x86_64-linux-gnu/libgslcblas.so -lm 

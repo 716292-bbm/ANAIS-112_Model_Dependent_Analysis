@@ -1,0 +1,3 @@
+// the configured version number
+#define RAPIDD_VERSION_MAJOR @RAPIDD_VERSION_MAJOR@
+#define RAPIDD_VERSION_MINOR @RAPIDD_VERSION_MINOR@
