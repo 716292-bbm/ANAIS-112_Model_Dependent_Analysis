@@ -1,189 +1,194 @@
-# `fitSimulMakeExclusion.cpp`
+# fitSimulMakeExclusion — Documentación
 
-Programa en **C++ / ROOT** que construye las curvas de exclusión de ANAIS-112 mediante un
-**ajuste simultáneo** (*simultaneous fit*) del espectro medido con RooFit. Para cada masa
-de WIMP $m_\chi$ recorre el espectro de bajo fondo de los nueve detectores, ajusta un modelo
-de fondo más una señal teórica de materia oscura, y despeja la sección eficaz límite a un
-nivel de confianza dado. El resultado es un `TGraph` en el plano $(\sigma, m_\chi)$.
-
-El código admite la interacción independiente del espín (SI) y las dependientes del espín
-en protón (SDp) y neutrón (SDn), varios modelos de factor de *quenching*, la inclusión
-opcional de la población ALE, y —lo más relevante para este trabajo— la posibilidad de
-tomar el ritmo teórico desde distintos códigos externos (**el código propio de ANAIS,
-RAPIDD, WIMPyDD** o  **DMAnalysis** ).
-
-# Partes del código desarrolladas en este trabajo:
+Programa para calcular la **curva de exclusión** de materia oscura (sección eficaz WIMP-nucleón límite frente a la masa del WIMP) del experimento **ANAIS**, mediante un ajuste simultáneo con RooFit de los 9 detectores.
 
 ---
 
-## 1. Carga del ritmo teórico desde código externo (parte desarrollada)
+## 1. Qué hace, en resumen
 
-El espectro esperado de materia oscura no se calcula dentro de este programa, sino que se
-lee **ya generado** desde archivos ROOT producidos por cada código de cálculo de ritmo.
-Esto permite validar el código propio contra herramientas de referencia sin cambiar el
-resto del análisis y en un futuro introducir nuevos análisis (por ejemplo otros operadores de teoría efectiva)
+Para cada masa de WIMP de una lista, el programa:
 
-### Selección del código: la variable `thmodel`
+1. Obtiene el **espectro teórico** (ritmo esperado de eventos de materia oscura), ya sea calculándolo con `DMRate` o leyéndolo de un fichero externo.
+2. Le aplica la **resolución energética** del detector (por convolución, por Monte Carlo, o nada).
+3. Realiza un **ajuste simultáneo** de los datos experimentales en los 9 detectores con el modelo `datos = nNorm·señal + nbkg·fondo`, dejando libre únicamente `nNorm` (proporcional a la sección eficaz).
+4. Del valor y el error de `nNorm` deriva la **sección eficaz límite** al nivel de confianza pedido.
 
-El modelo teórico se elige con el argumento de línea de comandos `argv[4]`, que se guarda
-en la variable entera `thmodel`. Su valor selecciona el nombre del archivo ROOT del que se
-leerá el ritmo:
+Al final construye la curva σ(mW), la guarda en un fichero ROOT y la dibuja en un PNG.
 
-| `thmodel` | Código de origen | Archivo ROOT |
-|:---:|---|---|
-| `0` | `DMAnalysis` interno (vía `DMModelGetRate`) | `RAPIDD_SI_TH1D.root` |
-| `1` | **Código desarrollado en este trabajo** (Python) | `ANAIS_SI_TH1D.root` |
-| `2` | **RAPIDD** | `RAPIDD_SI_TH1D.root` |
-| `3` | **WIMPyDD** | `WIMPYDD_SI_TH1D.root`, `WIMPYDD_SDp_TH1D.root` o `WIMPYDD_SDn_TH1D.root` |
-| `4` | `DMAnalysis` por archivo | `DMA_SI_TH1D.root` |
+---
+
+## 2. Inputs (argumentos de línea de comandos)
+
+El programa se ejecuta con **8 argumentos obligatorios**, todos posicionales y en este orden:
+
+```
+./fitSimulMakeExclusion cl eneIni eneEnd thmodel spinModel qfModel ANOD resolution_p
+```
+
+| # | Argumento | Tipo | Significado | Valores |
+|---|-----------|------|-------------|---------|
+| 1 | `cl` | double | Nivel de confianza del límite | `90` o `95` |
+| 2 | `eneIni` | double | Energía mínima del ajuste (keV) | p.ej. `1.0` |
+| 3 | `eneEnd` | double | Energía máxima del ajuste (keV) | p.ej. `6.0` |
+| 4 | `thmodel` | int | Modelo teórico / origen del espectro de señal | `0`-`5` (ver abajo) |
+| 5 | `spinModel` | int | Tipo de acoplo | `0`-SI, `1`-SD protón, `2`-SD neutrón |
+| 6 | `qfModel` | int | Modelo de *quenching factor* | `1`-DAMA, `2`-ANAIS cte, `3`-TAMARA |
+| 7 | `ANOD` | int (bool) | Incluir población ALE en el fondo | `0`-no, `1`-sí |
+| 8 | `resolution_p` | int | Tratamiento de la resolución | `0`-ninguna, `1`-gaussiana (MC), `2`-convolución |
+
+Si se pasan **menos de 8 argumentos**, el programa imprime la ayuda de uso y termina con código `1`.
+
+### Detalle del argumento `thmodel`
+
+| Valor | Modelo | Fichero de señal usado |
+|-------|--------|------------------------|
+| `0` | DMAnalysis (calculado en vivo con `DMRate`) | — (no lee fichero) |
+| `1` | Python | `ANAIS_SI_TH1D.root` |
+| `2` | RAPIDD | `RAPIDD_SI_TH1D.root` |
+| `3` | WIMPYDD | `WIMPYDD_SI/SDp/SDn_TH1D.root` (según spin) |
+| `4` | DMAnalysis (por archivo) | `DMA_SI_TH1D.root` |
 | `5` | Migdal | `MIGDAL.root` |
 
-En el caso de WIMPyDD (`thmodel == 3`) el nombre del archivo depende además del tipo de
-interacción (`SpinModel`), de modo que se cargan histogramas distintos para SI, SDp y SDn.
-Esta cadena de `if` que asigna `fileName` es el punto donde se decide, en la práctica, qué
-código de ritmo se está usando.
+> Nota: solo `thmodel == 0` calcula el espectro internamente con `DMRate`. El resto lo **lee de un fichero** con `DMModelGetRateEeeFromFile`.
 
-El sufijo del nombre del `TGraph` de salida también refleja el código empleado
-(`_PY` para Python/ANAIS, `_RA` para RAPIDD, `_WI` para WIMPyDD, `_DM_SG`/`_DMA` para
-DMAnalysis), lo que facilita comparar las curvas de exclusión obtenidas con cada uno.
+### Detalle del argumento `qfModel`
 
-### Lectura y reconstrucción del espectro: `DMModelGetRateEeeFromFile`
+El *quenching factor* (QF) relaciona la energía de retroceso nuclear con la energía electrón-equivalente medida: 
 
-Salvo el caso `thmodel == 0` (que llama a `DMModelGetRate` y calcula el ritmo con la
-librería `DMRate` interna), todos los modelos externos se cargan con la función:
+| Valor | Modelo | QF Na | QF I |
+|-------|--------|-------|------|
+| `1` | DAMA | 0.30 (cte) | 0.09 (cte) |
+| `2` | ANAIS cte | 1.0 (cte) | 1.0 (cte) |
+| `3` | TAMARA | QF(E) leído de `QFTamara.root` (`gNa`) | QF(E) leído de `QFTamara.root` (`gI`) |
 
-```cpp
-TH1D *DMModelGetRateEeeFromFile(std::string fileName,
-                                std::string nameNa,
-                                std::string nameI)
-```
+### Detalle del argumento `resolution_p`
 
-Esta función es la interfaz común con los códigos externos. Su lógica es:
+| Valor | Método | Cómo funciona |
+|-------|--------|---------------|
+| `0` | Sin resolución | El espectro se usa tal cual |
+| `1` | Gaussiana (Monte Carlo) | Genera 10⁷ eventos y los desplaza con σ(E); reconstruye el espectro |
+| `2` | Convolución | Convoluciona el espectro con la gaussiana σ(E) mediante `Conv2` (más rápido y sin ruido) |
 
-1. **Abre el archivo ROOT** indicado por `fileName` y recupera dos histogramas: uno con el
-   ritmo del **sodio** (`nameNa`) y otro con el del **yodo** (`nameI`), cada uno en función de la energía de retroceso nuclear. Los nombres de estos histogramas se construyen antes, en el bucle principal, con el patrón `hist_Na_mw_<masa>` / `hist_I_mw_<masa>`, de forma que cada masa de WIMP tiene su par de histogramas.
-
-2. **Convierte la energía de retroceso nuclear a energía equivalente en electrones**
-   ($E_{ee}$), que es la magnitud que mide realmente el detector, aplicando el factor de *quenching* $Q$ elemento por elemento.E l *quenching* puede ser constante (`QNa`, `QI`) o dependiente de la energía si se ha cargado como `TGraph` (`gQNa`, `gQI`), en cuyo caso se evalúa en cada
-   punto con `gQNa->Eval(Eee)`.
-
-3. **Combina sodio y yodo** en el ritmo del cristal de NaI, ponderando por el número másico
-   de cada especie. Devuelve un único histograma `hWimp` con el ritmo del NaI en $E_{ee}$, listo para
-   convolucionar con la resolución.
-
-De este modo, añadir un nuevo código de cálculo de ritmo se reduce a generar un archivo
-ROOT con los histogramas de Na e I por masa y añadir una entrada en la selección de
-`fileName`; el resto del ajuste no cambia.
+En los modos 1 y 2, la anchura de la resolución es `σ(E) = p1 + p2·√E`, con `p1`, `p2` leídos de un ajuste previo (`fitsResolution.root` para el modo 2).
 
 ---
 
-## 2. Convolución gaussiana con la resolución del detector (parte desarrollada)
+## 3. Ficheros de entrada requeridos
 
-El ritmo leído del archivo hay que **convolucionarlo con una gaussiana** (cuya anchura depende de la energía) antes de ajustarlo a los datos.
+Además de los argumentos, el programa espera encontrar (rutas relativas al directorio de ejecución):
 
-### Selección del método: `resolution_p`
-
-La variable `resolution_p` controla cómo se aplica la resolución:
-
-- `0` — no se aplica resolución.
-- `1` — resolución por **muestreo Monte Carlo**: se sortean $10^7$ eventos del espectro con
-  `GetRandom()` y cada uno se desplaza con `TRandom::Gaus(ee, sigma)`, rellenando el
-  histograma resultante. Después se renormaliza para conservar la integral.
-- `2` — resolución por **convolución numérica directa** (el método usado), implementado en
-  la función `Conv2`.
-
-En ambos casos la anchura de la gaussiana sigue la forma
-$\sigma_E = p_1 + p_s\sqrt{E}$, con los parámetros $p_1$ y $p_s$ (`param_1`, `param_2`)
-leídos de un ajuste de resolución almacenado en `fitsResolution.root` (función `fresD0`).
-
-### La función `Conv2`
-
-```cpp
-int Conv2(double e1, double e2, double ebin, double p1, double ps,
-          double *S0, TH1 *ritmo_sr)
-```
-
-Realiza la convolución del espectro `ritmo_sr` con la gaussiana de resolución, devolviendo
-en el array `S0` el ritmo emborronado en cada bin de salida. Los pasos:
-
-1. **Array auxiliar de ritmos.** Se muestrea el espectro de entrada en un array denso de
-   `arrayDim = 400` puntos, extendido más allá del rango de interés en $\pm 5\sigma$
-   (`nSig = 5`) para que las colas de la gaussiana no se trunquen. La anchura local se
-   estima con $\sigma = |p_1 + p_s\sqrt{E}|$.
-
-2. **Triple bucle de integración.** Para cada bin de salida (bucle en `ei`):
-   - se subdivide el bin en 20 pasos (bucle en `edif`) para integrar dentro del propio bin;
-   - en cada punto se integra la gaussiana sobre un intervalo de $\pm 5\sigma$ (bucle en `en`), con peso multiplicado por el valor del ritmo interpolado del array auxiliar.
-   - El valor convolucionado se **normaliza** dividiendo por la suma de pesos (`NORM2`),
-     lo que garantiza que la convolución conserva el número de cuentas.
-
-3. **Caso $\sigma = 0$.** Si la anchura es nula se toma directamente el valor del array sin
-   convolucionar, evitando la división por cero.
-
-El resultado (`rate_res`) se vuelca en el histograma `hWimp`, que ya representa el espectro
-teórico tal como lo vería el detector. Este es el histograma que se convierte en
-`RooHistPdf` (`pdf_Wimp`) y entra en el ajuste.
+- **Datos experimentales:** `../../data/BEhistos_yearN.root` — histogramas de fondo medido, uno por detector (`hbea_...y_D0..D8`). El nombre incorpora los años seleccionados.
+- **Modelo de fondo:** `../../backgroundModel/backgroundModel_single_y123456.root` (o `..._conANOD.root` si `ANOD=1`) — histogramas `hD0..hD8`.
+- **Resolución:** `fitsResolution.root` (con `resolution_p=2`) o la ruta a `.../resMartaByDet/fitsResolution.root` (con `resolution_p=1`), objeto `fresD0`.
+- **Quenching factor:** `QFTamara.root` (solo con `qfModel=3`), con los `TGraph` `gNa` y `gI`.
+- **Espectros de señal:** el `.root` correspondiente al `thmodel` (ver tabla), salvo `thmodel=0`.
+- **Para `DMRate` (`thmodel=0`):** `rate.dat`.
+- **Fondo del plot:** `plots/SI_mw_em1_e4_sdp_5em50_em37.JPG` (imagen de referencia).
 
 ---
 
-## 3. Resto del programa (resumen)
+## 4. Outputs
 
-### Configuración y argumentos de entrada
-`main` recibe por línea de comandos: nivel de confianza (`cl`), energías mínima y máxima
-del intervalo de ajuste (`min`, `max`), el modelo teórico (`thmodel`), y opcionalmente el
-modelo de *quenching* (`qf`) y la inclusión de ALE. El tipo de interacción está fijado en
-el código con `SpinModel` (0 = SI, 1 = SDp, 2 = SDn).
+- **Fichero ROOT:** `plots/SI_varios_2.root` (abierto en modo `update`). Dentro se guarda un `TGraph` con la curva σ(mW). El **nombre del objeto** codifica toda la configuración usada, por ejemplo:
 
-### Factor de *quenching*
-Según `qfModel` se establece: `1` → valores constantes de DAMA ($Q_{Na}=0.3$, $Q_I=0.09$);
-`2` → constante de ANAIS; en otro caso se cargan las curvas dependientes de la energía
-(`gNa`, `gI`) desde `QFTamara.root`. Estas curvas son las que usa la conversión a $E_{ee}$
-descrita en la sección 1.
+  ```
+  gA112_6y_90_1.000000_6.000000_QFdama_ANOD_DM_SG_rp2_SI
+  ```
 
-### Lectura de datos y exposición
-Se fijan los tiempos vivos de los nueve detectores y se calcula la exposición
-(tiempo vivo × 12.5 kg). El espectro medido se lee de `BEhistos_year123456.root` y se
-carga como `RooDataHist` con una categoría por detector (`RooCategory`), preparándolo para
-el ajuste simultáneo.
+  El nombre se compone de: prefijo + CL + rango de energía + modelo de QF + (ANOD) + modelo teórico + modo de resolución (`_rp0/_rp1/_rp2`) + modelo de spin. Esto permite guardar muchas curvas en el mismo fichero sin que se pisen.
 
-### Modelo de fondo
-Se lee el modelo de fondo por detector (con o sin ALE según el sufijo `_conANOD`) y se
-convierte en `RooHistPdf`. Su normalización se fija a la integral del fondo simulado y se
-mantiene **constante** en el ajuste, de modo que el único parámetro libre es la
-normalización de la señal WIMP (`nNorm`).
+- **Figura PNG:** `plots/<mismo_nombre>.png` — la curva de exclusión dibujada sobre la imagen de referencia, con ejes logarítmicos y un eje secundario en pb.
 
-### Bucle en masas y ajuste
-Para cada $m_\chi$ (el vector `mw` cubre de ~2 GeV a $10^4$ GeV) se construye, por detector,
-el modelo `nNorm·pdf_Wimp + nbkg·pdf_bkg` y se combinan en un `RooSimultaneous`. El ajuste
-se hace con `fitTo(...)` de forma extendida sobre el rango de energía elegido.
-
-### Cálculo de la sección eficaz límite
-Del ajuste se obtiene `nNorm` y su error; se aplica el factor del nivel de confianza
-(1.28 para 90 %, 1.64 para 95 %) y se divide por la integral del espectro teórico para
-despejar la sección eficaz. Finalmente se convierte de pb a cm² ($\times 10^{-36}$) y se
-normaliza por la exposición total. Existe además una rama (con `min <= 0`) que busca el
-**intervalo de integración óptimo** barriendo subintervalos entre 1 y 6 keVee.
-
-### Salida
-Los pares $(m_\chi, \sigma)$ se guardan en un `TGraph` cuyo nombre codifica todas las
-opciones del análisis (años, CL, intervalo, modelo de QF, ALE, código teórico y tipo de
-interacción), se escribe en un archivo ROOT y se representa en un lienzo con ejes
-logarítmicos y un eje secundario en pb.
+- **Salida por pantalla:** resumen de la configuración, cuentas al CL para cada masa, exposición total y la tabla final `mW → sigma`.
 
 ---
 
-## Uso
+## 5. Funciones del programa
+
+### `int Conv2(e1, e2, ebin, p1, ps, S0, ritmo_sr)`
+
+Convoluciona un espectro con la resolución gaussiana del detector.
+
+- **Entrada:** rango `[e1, e2]` y binado `ebin` de salida; parámetros de resolución `p1`, `ps` (σ(E) = |p1 + ps·√E|); histograma de entrada `ritmo_sr`.
+- **Salida:** rellena el array `S0` con el ritmo convolucionado. Devuelve `0` siempre.
+- **Cómo funciona:** precalcula el ritmo de entrada en un array fino (para no llamar a `GetBinContent` en los bucles internos), y para cada bin de salida integra el producto `ritmo(en)·gauss(edif−en)` sobre una ventana de ±5σ, normalizando por el peso gaussiano acumulado. Es el método usado cuando `resolution_p == 2`.
+
+### `TH1F* DMModelGetRate(mw, sigma, qfModel, SpinModel)`
+
+Calcula el espectro teórico de señal WIMP **en vivo** con la librería `DMRate` (camino de `thmodel == 0`).
+
+- **Entrada:** masa del WIMP `mw` (GeV); `sigma` (normalización, se suele pasar 1); `qfModel` (no se usa directamente aquí); `SpinModel`.
+- **Salida:** histograma `TH1F` con el ritmo (1000 bins), en energía de retroceso nuclear.
+- **Cómo funciona:** inicializa `DMRate` desde `rate.dat`, fija la masa y, según `SpinModel`, activa el acoplo SI (θ=0), SD-protón (θ=0) o SD-neutrón (θ=π/2). Asigna el QF del Na al elemento 0 y el del I al elemento 1 (constante o gráfico según corresponda). Con la macro `ARCHIVO` activada, además guarda el histograma en un `.root`.
+
+### `TH1D* DMModelGetRateEeeFromFile(fileName, nameNa, nameI)`
+
+Lee el espectro de señal desde un **fichero externo** (usado por todos los `thmodel` salvo el 0).
+
+- **Entrada:** `fileName` (ROOT con los histogramas); `nameNa` y `nameI` (nombres de los histogramas de Na y I dentro del fichero).
+- **Salida:** histograma `TH1D` combinado, en energía electrón-equivalente. Devuelve `nullptr` si algo falla (con mensaje de error).
+- **Cómo funciona:** lee los histogramas de Na y de I (que están en energía de retroceso nuclear), y para cada bin en energía electrón-equivalente convierte con el QF (`ENR = Eee/QF`, y el ritmo se escala por `1/QF`). Combina ambos según la abundancia molar del NaI: `(23·Na + 127·I) / 150`.
+
+### `int main(int argc, char** argv)`
+
+Orquesta todo el cálculo. Sus bloques principales:
+
+1. **Argumentos:** comprueba que hay 8 y los lee.
+2. **Resolución:** si `resolution_p == 2`, carga `p1`, `p2` de `fitsResolution.root`.
+3. **Quenching factor:** fija QF constantes o carga los gráficos según `qfModel`.
+4. **Datos y categorías:** define la variable de energía de RooFit, la lista de años y detectores, y una `RooCategory` con un tipo por detector (necesaria para el fit simultáneo).
+5. **Lectura de datos:** carga los histogramas de datos, los escala a número de cuentas y los mete en un `RooDataHist` por categoría.
+6. **Modelo de fondo:** abre el fichero de fondo (con o sin ANOD) y crea el parámetro libre `nNorm`.
+7. **Lista de masas y nombres:** construye el array de masas (lista fija para Migdal, rejilla logarítmica para el resto) y los nombres de los histogramas de señal. Selecciona el fichero de señal según `thmodel`.
+8. **Bucle sobre masas:** para cada masa obtiene el espectro, le aplica la resolución, construye el modelo `nNorm·señal + nbkg·fondo` por detector (con `nbkg` **fijo** y `nNorm` **libre**), hace el ajuste extendido simultáneo, y calcula la sección eficaz límite (factor 1.64 para 95 %, 1.28 para 90 %), normalizada por la exposición total.
+9. **Resultados y gráfica:** imprime la tabla, construye el nombre codificado, guarda el `TGraph` en el `.root` y dibuja el PNG.
+
+---
+
+## 6. Cómo funciona `runExclusion.sh`
+
+Es un script auxiliar que **automatiza el barrido** de muchas ejecuciones del programa sin tener que escribirlas a mano. Ejecuta `fitSimulMakeExclusion` sobre **todas las combinaciones** de los parámetros que se le indiquen.
+
+### Estructura
+
+Toda la configuración está en listas al principio del script (sección `CONFIG`), que son lo único que hay que editar:
 
 ```bash
-fitSimulMakeExclusion <cl> <eneIni> <eneEnd> <thmodel> [qf] [includeALE]
+CL=90                              # Nivel de confianza (fijo)
+
+INTERVALS=(                        # Intervalos de energia [min max]
+  "1.0 6.0"
+  "2.0 6.0"
+)
+
+THMODELS=(0 1 2 3 4 5)             # Modelos teoricos a recorrer
+SPINMODELS=(0 1 2)                 # Modelos de spin
+QFMODELS=(1 2 3)                   # Modelos de quenching factor
+ANODS=(0 1)                        # Poblacion ALE (no / si)
+RESOLUTIONS=(0 1 2)               # Tratamiento de la resolucion
+
+EXE=./fitSimulMakeExclusion       # Ejecutable a llamar
 ```
 
-- `cl` — nivel de confianza (p. ej. `90` o `95`).
-- `eneIni`, `eneEnd` — límites del intervalo de ajuste en keVee (usar `eneIni <= 0` para
-  buscar el intervalo óptimo).
-- `thmodel` — código del ritmo teórico: `1` ANAIS, `2` RAPIDD, `3` WIMPyDD, `4` DMAnalysis,
-  `5` Migdal.
-- `qf` *(opcional)* — `1` DAMA, `2` constante ANAIS, cualquier otro valor → dependiente de
-  la energía.
-- `includeALE` *(opcional)* — incluye la población ALE.
+### Qué hace
+
+El script anida bucles (`for`) sobre cada lista y, para **cada combinación**, lanza:
+
+```bash
+./fitSimulMakeExclusion $CL $eneIni $eneEnd $thmodel $spin $qf $anod $res
+```
+
+Es decir, recorre **intervalos × thmodel × spin × qf × ANOD × resolución**. Con las listas de ejemplo son `2 × 6 × 3 × 3 × 2 × 3 = 648` ejecuciones.
+
+Antes de cada ejecución imprime una cabecera indicando qué combinación se está corriendo, y comprueba el código de salida para llevar la cuenta de cuántas terminaron bien y cuántas fallaron. Al final imprime un resumen:
+
+```
+Terminado. Total: 648   OK: 645   Fallidas: 3
+```
+
+### Cómo usarlo
+
+```bash
+bash runExclusion.sh
+```
 
