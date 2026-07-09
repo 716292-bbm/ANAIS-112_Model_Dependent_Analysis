@@ -51,8 +51,9 @@ C con CMake. Consulta los README propios dentro de cada carpeta.
 Histogramas de bajo fondo de ANAIS-112 en formato ROOT (`BEhistos_year123456.root`),
 correspondientes a los primeros seis años de toma de datos, promediados sobre los nueve
 detectores. Es la entrada experimental del análisis. Incluye también el modelo de fondo
-obtenido por simulación Monte Carlo, con la población de eventos anómalos (ALE)(`backgroundModel_single_y123456_conANOD.root`) y sin ella
-(`backgroundModel_single_y123456.root`).
+obtenido por simulación Monte Carlo, con (`backgroundModel_single_y123456_conANOD.root`) y sin
+(`backgroundModel_single_y123456.root`) la población de eventos anómalos (ALE), que es la
+componente de fondo del ajuste.
 
 ### `Codigo_ANAIS/`
 `fitSimulMakeExclusion.cpp` — rutina en C++ (ROOT) empleada para el ajuste del espectro
@@ -65,9 +66,12 @@ Herramientas de generación de ritmos y de validación cruzada.
 - **`GeneraRitmo/`** — Generación de listas de ritmo esperado (SI y SD) y comparación con
   códigos de referencia. Contiene la subcarpeta `Libs/` con:
   - `ANAIS/` — funciones propias de ritmo teórico y experimental (versión de librería).
-  - `WIMPYDD/` — copia de la librería **WIMPyDD** (teoría efectiva de campos no relativista),
-    usada para validar los códigos propios.
-  - `RAPIDD/` — copia de la librería **RAPIDD**, usada igualmente como validación independiente.
+  - `WIMPYDD/` — copia de la librería **WIMPyDD**
+    ([Jeong et al. 2022](https://arxiv.org/abs/2106.06207)), basada en la teoría efectiva de
+    campos no relativista, usada para validar los códigos propios.
+  - `RAPIDD/` — copia de la librería **RAPIDD**
+    ([Cerdeño et al. 2018](https://arxiv.org/abs/1802.03174)), usada igualmente como
+    validación independiente.
 - **`Comparacion/`** — Notebooks y datos para comparar los resultados propios con WIMPyDD/RAPIDD
   y con la señal de DAMA/LIBRA, y para optimizar el intervalo de integración.
 
@@ -98,6 +102,23 @@ cada uno con sus datos y figuras (`.svg`):
    de `Presentacion/` y ejecuta su notebook.
 
 
+
+---
+
+## Créditos y referencias
+
+Para la validación cruzada de los códigos propios se emplean dos herramientas externas de
+la comunidad, incluidas en `Librerias/GeneraRitmo/Libs/`:
+
+- **WIMpyDD** — I. Jeong, S. Kang, S. Scopel y G. Tomar, *WimPyDD: An object-oriented Python
+  code for the calculation of WIMP direct detection signals*, Comput. Phys. Commun. **276**
+  (2022) 108342, [arXiv:2106.06207](https://arxiv.org/abs/2106.06207).
+  Web del proyecto: <https://wimpydd.hepforge.org/>.
+
+- **RAPIDD** — D. G. Cerdeño, A. Cheek, E. Reid y H. Schulz, *Surrogate Models for Direct
+  Dark Matter Detection*, JCAP **08** (2018) 011,
+  [arXiv:1802.03174](https://arxiv.org/abs/1802.03174).
+  Implementación empleada: <https://github.com/cheekyparticle/RAPIDD_for_DM>.
 
 ---
 
