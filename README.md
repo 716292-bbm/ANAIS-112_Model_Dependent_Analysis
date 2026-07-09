@@ -50,7 +50,9 @@ C con CMake. Consulta los README propios dentro de cada carpeta.
 ### `Datos/`
 Histogramas de bajo fondo de ANAIS-112 en formato ROOT (`BEhistos_year123456.root`),
 correspondientes a los primeros seis años de toma de datos, promediados sobre los nueve
-detectores. Es la entrada experimental del análisis.
+detectores. Es la entrada experimental del análisis. Incluye también el modelo de fondo
+obtenido por simulación Monte Carlo, con la población de eventos anómalos (ALE)(`backgroundModel_single_y123456_conANOD.root`) y sin ella
+(`backgroundModel_single_y123456.root`).
 
 ### `Codigo_ANAIS/`
 `fitSimulMakeExclusion.cpp` — rutina en C++ (ROOT) empleada para el ajuste del espectro
@@ -105,4 +107,3 @@ Este repositorio se distribuye bajo la **GNU Affero General Public License v3.0*
 (ver el archivo [`LICENSE`](LICENSE)). Permite usar, modificar y redistribuir el código,
 también con fines comerciales, siempre que se mantenga la atribución y que cualquier obra
 derivada se publique bajo la misma licencia, con el código fuente disponible.
-

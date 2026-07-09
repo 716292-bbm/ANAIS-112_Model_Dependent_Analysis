@@ -16,6 +16,11 @@ Incorporación del **modelo de fondo** de ANAIS-112 obtenido por simulación Mon
 espectro se ajusta como fondo más señal, lo que mejora la sensibilidad en varios órdenes de
 magnitud (`SI_fondo.ipynb`).
 
+### `ModeloFondo/`
+Representación del **espectro de baja energía** de ANAIS-112 comparando los datos medidos, el
+modelo de fondo obtenido por simulación Monte Carlo y el fondo más la población de ALEs
+(`ModeloFondo.ipynb`, figura `Modelosdefondo.pdf`).
+
 ### `Intervalo/`
 Optimización del **intervalo de integración** en energía: para cada masa de WIMP se busca el
 subintervalo que proporciona el límite más restrictivo (`SI_Intervalo.ipynb`).
@@ -38,6 +43,11 @@ energías y los contornos de DAMA y COSINE para comparar.
 óptimo y comparando ambos modelos de *quenching* (`SI_FINAL.ipynb`, `SDp_FINAL.ipynb`,
 `SDn_FINAL.ipynb`).
 
+### `Migdal/`
+Estudio del **efecto Migdal**: se compara el ritmo del retroceso nuclear (NR) con el de la
+señal Migdal para distintas masas de WIMP (`migdal.ipynb`, figura `rate_migdal.pdf`, datos en
+los `.csv` locales). Los límites resultantes se recogen en los ficheros `Final/*_Migdal_*`.
+
 ### `Exposición/`
 Estudio de la dependencia de la sensibilidad con la **exposición** del experimento
 (`Plot_Exposición.ipynb`).
@@ -46,8 +56,6 @@ Estudio de la dependencia de la sensibilidad con la **exposición** del experime
 Representación del **ritmo diferencial medido por cada uno** de los nueve detectores
 (`Ritmo_Por_Detector.ipynb`).
 
-### `Comparacion(ohare)/`
-Comparación de los resultados con el **compendio público de límites** de otros experimentos
-de detección directa (basado en el repositorio de datos de Ciaran O'Hare). Contiene una gran
-cantidad de archivos de datos de terceros; **no es desarrollo original de este trabajo** y
-podría eliminarse sin afectar al análisis propio.
+### `PlanoGalactico/`
+Figura ilustrativa del **"viento de WIMPs"**: representa el esquema de velocidades que da lugar a la modulación anual de la señal
+(junio/diciembre). Es material gráfico de apoyo (`wimp_wind.ipynb`, `wimp_wind_2.pdf`).
